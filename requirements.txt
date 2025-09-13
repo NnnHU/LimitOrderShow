@@ -1,0 +1,9 @@
+flask==3.0.2
+flask-cors==4.0.0
+plotly==5.19.0
+kaleido==0.2.1
+requests==2.31.0
+python-binance==1.0.19
+numpy==1.26.4
+pandas==2.2.1
+aiohttp==3.9.3 

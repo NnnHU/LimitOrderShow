@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Market Depth Visualization Demo</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #1a1a1a;
+            color: #ffffff;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        .chart-container {
+            background-color: #2d2d2d;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .chart-row {
+            display: flex;
+            gap: 20px;
+        }
+        .chart-column {
+            flex: 1;
+        }
+        h1, h2 {
+            color: #00b894;
+        }
+        .controls {
+            margin-bottom: 20px;
+        }
+        select, button {
+            background-color: #2d2d2d;
+            color: #ffffff;
+            border: 1px solid #00b894;
+            padding: 8px 12px;
+            border-radius: 4px;
+            margin-right: 10px;
+        }
+        button:hover {
+            background-color: #00b894;
+            cursor: pointer;
+        }
+        .status {
+            color: #00b894;
+            margin-left: 10px;
+            display: none;
+        }
+        .error {
+            color: #ff7675;
+            margin-left: 10px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Binance Market Depth Analysis</h1>
+        
+        <div class="controls">
+            <select id="symbolSelect">
+                <option value="BTCUSDT">BTCUSDT</option>
+                <option value="ETHUSDT">ETHUSDT</option>
+            </select>
+            <button onclick="updateData()">Refresh Data</button>
+            <span id="status" class="status">Updating...</span>
+            <span id="error" class="error">Error fetching data</span>
+        </div>
+
+        <div class="chart-container">
+            <div class="chart-row">
+                <div class="chart-column">
+                    <h2>Spot Market Depth</h2>
+                    <div id="spotDepthChart"></div>
+                </div>
+                <div class="chart-column">
+                    <h2>Futures Market Depth</h2>
+                    <div id="futuresDepthChart"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="chart-container">
+            <div class="chart-row">
+                <div class="chart-column">
+                    <h2>Spot Market Buy/Sell Ratio</h2>
+                    <div id="spotRatioChart"></div>
+                </div>
+                <div class="chart-column">
+                    <h2>Futures Market Buy/Sell Ratio</h2>
+                    <div id="futuresRatioChart"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Plot depth chart
+        function plotDepthChart(orderBook, marketType) {
+            const chartId = marketType === 'spot' ? 'spotDepthChart' : 'futuresDepthChart';
+            const colors = marketType === 'spot' 
+                ? { asks: '#ff7675', bids: '#00b894' }
+                : { asks: '#ffa502', bids: '#2e86de' };
+
+            // Sort prices in descending order
+            const sortedBids = orderBook.bids.sort((a, b) => b[0] - a[0]);
+            const sortedAsks = orderBook.asks.sort((a, b) => b[0] - a[0]);
+
+            // Create asks trace (sells)
+            const asksTrace = {
+                x: sortedAsks.map(item => item[1]),
+                y: sortedAsks.map(item => item[0]),
+                name: 'Asks',
+                type: 'bar',
+                orientation: 'h',
+                marker: {
+                    color: colors.asks
+                },
+                text: sortedAsks.map(item => item[1].toFixed(3)),
+                textposition: 'auto',
+                hovertemplate: 'Price: %{y}<br>Quantity: %{x}<br>',
+            };
+
+            // Create bids trace (buys)
+            const bidsTrace = {
+                x: sortedBids.map(item => item[1]),
+                y: sortedBids.map(item => item[0]),
+                name: 'Bids',
+                type: 'bar',
+                orientation: 'h',
+                marker: {
+                    color: colors.bids
+                },
+                text: sortedBids.map(item => item[1].toFixed(3)),
+                textposition: 'auto',
+                hovertemplate: 'Price: %{y}<br>Quantity: %{x}<br>',
+            };
+
+            const layout = {
+                plot_bgcolor: '#2d2d2d',
+                paper_bgcolor: '#2d2d2d',
+                font: { color: '#ffffff' },
+                barmode: 'overlay',
+                height: 800,
+                margin: { l: 100, r: 50, t: 30, b: 50 },
+                xaxis: {
+                    title: 'Quantity',
+                    gridcolor: '#3d3d3d',
+                    zerolinecolor: '#3d3d3d',
+                    side: 'top'
+                },
+                yaxis: {
+                    title: 'Price (USDT)',
+                    gridcolor: '#3d3d3d',
+                    zerolinecolor: '#3d3d3d',
+                    autorange: true
+                },
+                showlegend: true,
+                legend: {
+                    font: { color: '#ffffff' },
+                    x: 0,
+                    y: 1
+                }
+            };
+
+            Plotly.newPlot(chartId, [asksTrace, bidsTrace], layout);
+        }
+
+        // Plot ratio chart
+        function plotRatioChart(ratioData, marketType) {
+            const chartId = marketType === 'spot' ? 'spotRatioChart' : 'futuresRatioChart';
+            const colors = marketType === 'spot' 
+                ? { positive: '#00b894', negative: '#ff7675' }
+                : { positive: '#2e86de', negative: '#ffa502' };
+
+            const trace1 = {
+                x: ratioData.ranges,
+                y: ratioData.ratios,
+                type: 'bar',
+                marker: {
+                    color: ratioData.ratios.map(ratio => 
+                        ratio > 0 ? colors.positive : colors.negative
+                    )
+                },
+                text: ratioData.ratios.map(ratio => ratio.toFixed(3)),
+                textposition: 'auto',
+                hovertemplate: 'Range: %{x}<br>Ratio: %{y:.3f}<br>'
+            };
+
+            const layout = {
+                plot_bgcolor: '#2d2d2d',
+                paper_bgcolor: '#2d2d2d',
+                font: { color: '#ffffff' },
+                height: 400,
+                margin: { l: 50, r: 30, t: 30, b: 50 },
+                xaxis: {
+                    title: 'Price Range',
+                    gridcolor: '#3d3d3d'
+                },
+                yaxis: {
+                    title: 'Buy/Sell Ratio',
+                    gridcolor: '#3d3d3d',
+                    zerolinecolor: '#3d3d3d'
+                },
+                showlegend: false
+            };
+
+            Plotly.newPlot(chartId, [trace1], layout);
+        }
+
+        // Update data and charts
+        async function updateData() {
+            const symbol = document.getElementById('symbolSelect').value;
+            const statusEl = document.getElementById('status');
+            const errorEl = document.getElementById('error');
+            
+            statusEl.style.display = 'inline';
+            errorEl.style.display = 'none';
+            
+            try {
+                // Fetch spot market data
+                const spotResponse = await fetch(`http://localhost:5000/api/market-depth/${symbol}/spot`);
+                const spotData = await spotResponse.json();
+                
+                // Fetch futures market data
+                const futuresResponse = await fetch(`http://localhost:5000/api/market-depth/${symbol}/futures`);
+                const futuresData = await futuresResponse.json();
+                
+                // Plot both charts
+                plotDepthChart(spotData.orderBook, 'spot');
+                plotDepthChart(futuresData.orderBook, 'futures');
+                plotRatioChart(spotData.ratioAnalysis, 'spot');
+                plotRatioChart(futuresData.ratioAnalysis, 'futures');
+                
+                statusEl.style.display = 'none';
+            } catch (error) {
+                console.error('Error fetching data:', error);
+                statusEl.style.display = 'none';
+                errorEl.style.display = 'inline';
+            }
+        }
+
+        // Initial load
+        updateData();
+
+        // Auto-refresh every 5 seconds
+        setInterval(updateData, 5000);
+    </script>
+</body>
+</html> 
